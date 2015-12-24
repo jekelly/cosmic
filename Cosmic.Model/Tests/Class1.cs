@@ -30,7 +30,7 @@ namespace Tests
         }
     }
 
-    public class RegroupTests
+    public class DefaultRegroupPhaseTests
     {
         private readonly RegroupTestsFixture fixture = new RegroupTestsFixture();
 
@@ -93,7 +93,7 @@ namespace Tests
             public TestPlanet AddPreferedPlanet()
             {
                 var planet = this.AddPlanet();
-                this.testPlayer.PreferedPlanet = planet;
+                this.testPlayer.PreferredPlanet = planet;
                 return planet;
             }
 
@@ -150,7 +150,7 @@ namespace Tests
 
         public IEnumerable<IShip> GetShips()
         {
-            throw new NotImplementedException();
+            return this.ships;
         }
 
         public IEnumerable<IShip> GetShips(IPlayer player)
@@ -158,9 +158,238 @@ namespace Tests
             return this.ships;
         }
 
-        public IShip RemoveShip(IPlayer player)
+        public void RemoveShip(IShip ship)
         {
-            throw new NotImplementedException();
+            this.ships.Remove(ship);
+        }
+    }
+
+    public class DefaultLaunchPhaseTests
+    {
+        [Fact]
+        public void PlayerWithNoColonies_DoesNotGetPromptedForShips()
+        {
+            var player = new ChooserPlayer();
+            var planet = new TestPlanet();
+            player.ShipChooser = () => { throw new Exception(); };
+            player.PlanetChooser = () => planet;
+            GameState game = new GameState();
+            game.SetPlayers(player);
+            DefaultLaunchPhase phase = new DefaultLaunchPhase();
+            new Action(() => phase.Do(game)).ShouldNotThrow();
+        }
+
+        [Fact]
+        public void ShipChoice_PlacedInHyperspaceGate()
+        {
+            var player = new TargetablePlayer();
+            var planet = new TestPlanet() { Owner = player };
+            var ship = new TestShip() { Owner = player };
+            player.TargetShip = ship;
+            player.TargetPlanet = planet;
+            var game = new GameState();
+            game.SetPlayers(player);
+            game.AddPlanet(planet);
+            planet.AddShip(ship);
+            DefaultLaunchPhase phase = new DefaultLaunchPhase();
+            phase.Do(game);
+            game.HyperspaceGate.GetShips().Should().Contain(ship);
+        }
+
+        [Fact]
+        public void ShipChoice_RemovedFromSourcePlanet()
+        {
+            var player = new TargetablePlayer();
+            var planet = new TestPlanet() { Owner = player };
+            var ship = new TestShip() { Owner = player };
+            player.TargetShip = ship;
+            player.TargetPlanet = planet;
+            var game = new GameState();
+            game.SetPlayers(player);
+            game.AddPlanet(planet);
+            planet.AddShip(ship);
+            DefaultLaunchPhase phase = new DefaultLaunchPhase();
+            phase.Do(game);
+            planet.GetShips().Should().NotContain(ship);
+        }
+
+        [Fact]
+        public void MinimumOfOneShip_Enforced()
+        {
+            int count = 0;
+            var player = new ChooserPlayer();
+            var planet = new TestPlanet() { Owner = player };
+            var ship = new TestShip() { Owner = player };
+            var game = new GameState();
+            player.ShipChooser = () =>
+            {
+                return count++ == 0 ? null : ship;
+            };
+            player.PlanetChooser = () => planet;
+            game.SetPlayers(player);
+            game.AddPlanet(planet);
+            planet.AddShip(ship);
+            DefaultLaunchPhase phase = new DefaultLaunchPhase();
+            phase.Do(game);
+            count.Should().Be(2);
+            game.HyperspaceGate.GetShips().Should().Contain(ship);
+            planet.GetShips().Should().NotContain(ship);
+        }
+
+        [Fact]
+        public void MaximumOfFourShips_Enforced()
+        {
+            int ship = 0;
+            var player = new ChooserPlayer();
+            var planet = new TestPlanet() { Owner = player };
+            var ships = Enumerable.Repeat(0, 5).Select(i => new TestShip() { Owner = player }).ToArray();
+            var game = new GameState();
+            player.ShipChooser = () =>
+            {
+                return ships[ship++];
+            };
+            player.PlanetChooser = () => planet;
+            game.SetPlayers(player);
+            game.AddPlanet(planet);
+            foreach (var s in ships)
+            {
+                planet.AddShip(s);
+            }
+            DefaultLaunchPhase phase = new DefaultLaunchPhase();
+            phase.Do(game);
+            ship.Should().Be(4);
+            foreach (var s in ships.Take(4))
+            {
+                game.HyperspaceGate.GetShips().Should().Contain(s);
+                planet.GetShips().Should().NotContain(s);
+            }
+        }
+
+        [Fact]
+        public void EncounterInHomeSystem_MayTargetEmptyPlanet()
+        {
+            var player = new TargetablePlayer();
+            var game = new GameState();
+            var planet = new TestPlanet() { Owner = player };
+            player.TargetPlanet = planet;
+            game.SetPlayers(player);
+            game.SetDefensivePlayer(player);
+            DefaultLaunchPhase phase = new DefaultLaunchPhase();
+            phase.Do(game);
+            game.HyperspaceGate.TargetPlanet.Should().Be(planet);
+        }
+
+        [Fact]
+        public void EncounterInHomeSystem_ChoosesOpponent()
+        {
+            var player = new TargetablePlayer();
+            var opponent = new NullPlayer();
+            var game = new GameState();
+            game.SetPlayers(player, opponent);
+            var planet = new TestPlanet() { Owner = player };
+            planet.AddShip(new TestShip() { Owner = opponent });
+            player.TargetPlanet = planet;
+            player.TargetPlayer = opponent;
+            game.SetDefensivePlayer(player);
+            DefaultLaunchPhase phase = new DefaultLaunchPhase();
+            phase.Do(game);
+            game.DefensePlayer.Should().Be(opponent);
+        }
+
+        [Fact]
+        public void HyperGateChoice_IsRespected()
+        {
+            TargetablePlayer player = new TargetablePlayer();
+            NullPlayer opponent = new NullPlayer();
+            TestPlanet planet = new TestPlanet() { Owner = opponent };
+            player.TargetPlanet = planet;
+            GameState game = new GameState();
+            game.SetPlayers(player, opponent);
+            game.AddPlanet(planet);
+            DefaultLaunchPhase phase = new DefaultLaunchPhase();
+            phase.Do(game);
+            game.HyperspaceGate.TargetPlanet.Should().Be(planet);
+        }
+
+        private class ChooserPlayer : NullPlayer
+        {
+            public Func<IPlanet> PlanetChooser { get; set; }
+            public Func<IShip> ShipChooser { get; set; }
+
+            public override IShip ChooseShip(IEnumerable<IShip> ships)
+            {
+                return this?.ShipChooser();
+            }
+
+            public override IPlanet ChooseTargetPlanet(IEnumerable<IPlanet> planets)
+            {
+                return this?.PlanetChooser();
+            }
+
+            public override IPlanet SelectPlanetToPlaceShip(IShip ship, IEnumerable<IPlanet> planets)
+            {
+                return this?.PlanetChooser();
+            }
+        }
+    }
+
+    class TargetablePlayer : NullPlayer
+    {
+        public IShip TargetShip { get; set; }
+        public IPlanet TargetPlanet { get; set; }
+        public IPlayer TargetPlayer { get; set; }
+
+        public override IShip ChooseShip(IEnumerable<IShip> ships)
+        {
+            return this.TargetShip;
+        }
+
+        public override IPlayer ChoosePlayerToAttack(IEnumerable<IPlayer> players)
+        {
+            return this.TargetPlayer;
+        }
+
+        public override IPlanet ChooseTargetPlanet(IEnumerable<IPlanet> planets)
+        {
+            return this.TargetPlanet;
+        }
+    }
+
+    class NullPlayer : IPlayer
+    {
+        public virtual bool AcceptEncounterInHomeSystem()
+        {
+            return false;
+        }
+
+        public virtual IPlayer ChoosePlayerToAttack(IEnumerable<IPlayer> players)
+        {
+            return null;
+        }
+
+        public virtual IShip ChooseShip(IEnumerable<IShip> ships)
+        {
+            return null;
+        }
+
+        public virtual IPlanet ChooseTargetPlanet(IEnumerable<IPlanet> planets)
+        {
+            return null;
+        }
+
+        public virtual Alien SelectAlien(params Alien[] aliens)
+        {
+            return null;
+        }
+
+        public virtual IEncounterCard SelectEncounterCard()
+        {
+            return null;
+        }
+
+        public virtual IPlanet SelectPlanetToPlaceShip(IShip ship, IEnumerable<IPlanet> planets)
+        {
+            return null;
         }
     }
 
@@ -208,7 +437,6 @@ namespace Tests
             DefaultDestinyPhase phase = new DefaultDestinyPhase();
             phase.Do(fixture.game);
             fixture.game.DefensePlayer.Should().Be(fixture.player);
-
         }
 
         class DefaultDestinyPhaseFixture
@@ -320,13 +548,14 @@ namespace Tests
             return aliens[0];
         }
 
-        public IPlanet PreferedPlanet { get; set; }
+        public IPlanet PreferredPlanet { get; set; }
+        public IShip PreferredShip { get; set; }
 
         public bool AcceptHomeSystemEncounters { get; set; }
 
         public IPlanet SelectPlanetToPlaceShip(IShip ship, IEnumerable<IPlanet> planets)
         {
-            return this.PreferedPlanet ?? planets.First();
+            return this.PreferredPlanet ?? planets.First();
         }
 
         public IEncounterCard SelectEncounterCard()
@@ -337,6 +566,21 @@ namespace Tests
         public bool AcceptEncounterInHomeSystem()
         {
             return this.AcceptHomeSystemEncounters;
+        }
+
+        public IPlanet ChooseTargetPlanet(IEnumerable<IPlanet> planets)
+        {
+            return this.PreferredPlanet ?? planets.First();
+        }
+
+        public IShip ChooseShip(IEnumerable<IShip> ships)
+        {
+            return this.PreferredShip ?? ships.First();
+        }
+
+        public IPlayer ChoosePlayerToAttack(IEnumerable<IPlayer> players)
+        {
+            throw new NotImplementedException();
         }
     }
 

@@ -35,11 +35,12 @@ namespace Cosmic.Model
         void AddShip(IShip ship);
         IEnumerable<IShip> GetShips();
         IEnumerable<IShip> GetShips(IPlayer player);
-        IShip RemoveShip(IPlayer player);
+        void RemoveShip(IShip player);
     }
 
     public interface IHyperspaceGate : IShipContainer
     {
+        IPlanet TargetPlanet { get; set; }
     }
 
     public interface IWarp : IShipContainer
@@ -169,7 +170,9 @@ namespace Cosmic.Model
 
         public void AddShipToHyperspaceGate(IShip ship)
         {
-
+            var colony = this.GetPlanetsWithColony(ship.Owner).Where(planet => planet.GetShips().Contains(ship)).Single();
+            colony.RemoveShip(ship);
+            this.gate.AddShip(ship);
         }
 
         public IShip RemoveShipFromHyperspaceGate(IPlayer player)
@@ -221,9 +224,10 @@ namespace Cosmic.Model
             this.defensePlayerIndex = this.GetPlayerIndex(player);
         }
 
-        internal object GetPlanetsWithColony(object nonOffensePlayers)
+        public IEnumerable<IShip> GetShipsOnPlanets(IPlayer player)
         {
-            throw new NotImplementedException();
+            var planets = this.GetPlanets(player);
+            return planets.SelectMany(planet => planet.GetShips(player));
         }
     }
 
@@ -254,11 +258,9 @@ namespace Cosmic.Model
             return ships.Where(ship => ship.Owner == activePlayer);
         }
 
-        public IShip RemoveShip(IPlayer activePlayer)
+        public void RemoveShip(IShip ship)
         {
-            var ship = this.GetShips(activePlayer).First();
             this.ships.Remove(ship);
-            return ship;
         }
     }
 
@@ -268,6 +270,7 @@ namespace Cosmic.Model
 
     internal class HyperspaceGate : ShipContainer, IHyperspaceGate
     {
+        public IPlanet TargetPlanet { get; set; }
     }
 
     public interface IEncounterCardSelection : ISelection<IEncounterCard> { }
@@ -651,6 +654,52 @@ namespace Cosmic.Model
         }
     }
 
+    public class DefaultLaunchPhase
+    {
+        public void Do(GameState state)
+        {
+            var offense = state.ActivePlayer;
+            // The offense takes the hyperspace gate and points it at one planet in the system indicated by the drawn destiny card. 
+            var planets = state.GetPlanets(state.DefensePlayer);
+            var planet = offense.ChooseTargetPlanet(planets);
+            state.HyperspaceGate.TargetPlanet = planet;
+            /*
+            The offense then takes one to four ships from any of his or her colonies, stacks them, and places them on the wide end of the
+            hyperspace gate. The offense may take ships from his or her home colonies or foreign colonies. Ships may all be taken from
+            the same colony or from different colonies. A player should be careful not to remove all of the ships from a colony, however,
+            as he or she will lose the colony by doing so (see “Stripping a Planet of Ships” on page 13)
+            */
+            if (planet.Owner == offense)
+            {
+                var opponents = planet.GetShips().Select(ship => ship.Owner).Distinct().Where(player => player != offense);
+                if (opponents.Any())
+                {
+                    var defense = offense.ChoosePlayerToAttack(opponents);
+                    state.SetDefensivePlayer(defense);
+                }
+            }
+            for (int i = 0; i < 4; i++)
+            {
+                var ships = state.GetShipsOnPlanets(offense);
+                if (!ships.Any())
+                {
+                    break;
+                }
+                var ship = offense.ChooseShip(ships);
+                if (ship == null)
+                {
+                    if (i == 0)
+                    {
+                        i--;
+                        continue;
+                    }
+                    break;
+                }
+                state.AddShipToHyperspaceGate(ship);
+            }
+        }
+    }
+
     public class DefaultRegroupPhase
     {
         public void Do(GameState state)
@@ -659,13 +708,15 @@ namespace Cosmic.Model
             var shipsInWarp = state.Warp.GetShips(activePlayer);
             if (shipsInWarp.Any())
             {
-                var ship = state.Warp.RemoveShip(activePlayer);
+                var ships = state.Warp.GetShips(activePlayer);
+                var ship = activePlayer.ChooseShip(ships);
                 var colonies = state.GetPlanetsWithColony(activePlayer);
                 IShipContainer target = state.HyperspaceGate;
                 if (colonies.Any())
                 {
                     target = activePlayer.SelectPlanetToPlaceShip(ship, colonies);
                 }
+                state.Warp.RemoveShip(ship);
                 target.AddShip(ship);
             }
         }
@@ -880,6 +931,9 @@ namespace Cosmic.Model
         //IColony PlaceShip(IShip ship, IEnumerable<IColony> colonies);
         IEncounterCard SelectEncounterCard();
         bool AcceptEncounterInHomeSystem();
+        IPlanet ChooseTargetPlanet(IEnumerable<IPlanet> planets);
+        IShip ChooseShip(IEnumerable<IShip> ships);
+        IPlayer ChoosePlayerToAttack(IEnumerable<IPlayer> players);
         //bool ShouldRedrawDestiny(IGame game);
     }
 
