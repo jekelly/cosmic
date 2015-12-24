@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace Cosmic.Model
 {
@@ -27,6 +28,11 @@ namespace Cosmic.Model
                 this.cards[i] = this.cards[newI];
                 this.cards[newI] = temp;
             }
+        }
+
+        public void PutCardOnTop(T card)
+        {
+            this.cards.Insert(this.index, card);
         }
     }
 }

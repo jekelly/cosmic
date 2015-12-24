@@ -54,6 +54,7 @@ namespace Cosmic.Model
     public class GameState
     {
         private int activePlayerIndex;
+        private int defensePlayerIndex;
         private readonly IHyperspaceGate gate;
         private readonly IWarp warp;
         private DestinyDeck destinyDeck;
@@ -77,6 +78,11 @@ namespace Cosmic.Model
         public IWarp Warp { get { return this.warp; } }
 
         public IHyperspaceGate HyperspaceGate { get { return this.gate; } }
+
+        public IPlayer DefensePlayer { get { return this.players[this.defensePlayerIndex]; } }
+
+        public IPlayer[] Players { get { return this.players; } }
+        public IPlayer[] NonOffensePlayers { get { return this.players.Where(player => player != this.ActivePlayer).ToArray(); } }
 
         public void SetActivePlayer(IPlayer player)
         {
@@ -205,9 +211,19 @@ namespace Cosmic.Model
             return this.aliens[playerIndex];
         }
 
-        public IEnumerable<IPlanet> GetPlanetsWithColony(IPlayer player)
+        public IEnumerable<IPlanet> GetPlanetsWithColony(params IPlayer[] players)
         {
-            return this.planets.Where(planet => planet.GetShips(player).Any());
+            return players.SelectMany(player => this.planets.Where(planet => planet.GetShips(player).Any())).Distinct();
+        }
+
+        public void SetDefensivePlayer(IPlayer player)
+        {
+            this.defensePlayerIndex = this.GetPlayerIndex(player);
+        }
+
+        internal object GetPlanetsWithColony(object nonOffensePlayers)
+        {
+            throw new NotImplementedException();
         }
     }
 
@@ -470,96 +486,6 @@ namespace Cosmic.Model
         }
     }
 
-    //class E : IEncounter
-    //{
-    //    private IPlayer offense;
-    //    private IPlayer defense;
-
-    //    private IPlanet targetPlanet;
-
-    //    private IColony defenseColony;
-    //    private IGame game;
-
-    //    public void DestroyDefenders()
-    //    {
-    //        this.targetPlanet.RemoveColony(defenseColony);
-    //        foreach (var ship in defenseColony.Ships)
-    //        {
-    //            //defense.LoseShipToWarp(ship);
-    //        }
-    //        // TODO: allies
-    //    }
-
-    //    public void EstablishOffenseColonies()
-    //    {
-    //        throw new NotImplementedException();
-    //    }
-    //}
-
-    interface IStartTurnAction
-    {
-    }
-
-    interface IModifier
-    {
-    }
-
-    interface IEncounterResolution
-    {
-        void Resolve(Enc encounter);
-    }
-
-    class Enc
-    {
-        public IPlayer Offense;
-        public IPlayer Defense;
-        public IPlayer[] OffensiveAllies;
-        public IPlayer[] DefensiveAllies;
-
-        public IShip[] OffenseShips;
-        public IShip[] DefenseShips;
-
-        public IPlanet TargetPlanet;
-        public IColony TargetColony;
-
-        public IEncounterCard OffenseCard;
-        public IEncounterCard DefenseCard;
-
-        public ICollection<IModifier> OffensiveModifiers;
-        public ICollection<IModifier> DefensiveModifiers;
-    }
-
-    class ScopedEnc
-    {
-        internal void AddModifierToAllies(IModifier modifier)
-        {
-            throw new NotImplementedException();
-        }
-
-        internal void RemoveModifierFromAllies(IModifier modifier)
-        {
-            throw new NotImplementedException();
-        }
-    }
-
-    class HumanPower
-    {
-        class HumanModifier : IModifier
-        {
-        }
-        HumanModifier hm = new HumanModifier();
-
-        public void Apply(ScopedEnc enc)
-        {
-            enc.AddModifierToAllies(this.hm);
-        }
-
-        public void Zap(ScopedEnc enc)
-        {
-            enc.RemoveModifierFromAllies(this.hm);
-        }
-    }
-
     //class Encounter
     //{
     //    public void Run()
@@ -699,6 +625,29 @@ namespace Cosmic.Model
         public NormalDeck(params ICard[] flares)
             : base(DefaultCards.Concat(flares).ToArray())
         {
+        }
+    }
+
+    public class DefaultDestinyPhase
+    {
+        public void Do(GameState state)
+        {
+            while (true)
+            {
+                var destinyCard = state.DrawDestinyCard();
+                var player = destinyCard.SelectPlayer(state);
+                if (player == state.ActivePlayer)
+                {
+                    var externalColonies = state.GetPlanetsWithColony(state.NonOffensePlayers);
+                    var playerPlanets = state.GetPlanets(state.ActivePlayer);
+                    if (!playerPlanets.Any(planet => externalColonies.Contains(planet)) || !player.AcceptEncounterInHomeSystem())
+                    {
+                        continue;
+                    }
+                }
+                state.SetDefensivePlayer(player);
+                break;
+            }
         }
     }
 
@@ -930,6 +879,7 @@ namespace Cosmic.Model
         //void LoseShipToWarp(IShip ship);
         //IColony PlaceShip(IShip ship, IEnumerable<IColony> colonies);
         IEncounterCard SelectEncounterCard();
+        bool AcceptEncounterInHomeSystem();
         //bool ShouldRedrawDestiny(IGame game);
     }
 
