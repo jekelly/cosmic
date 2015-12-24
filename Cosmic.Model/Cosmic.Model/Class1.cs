@@ -163,7 +163,7 @@ namespace Cosmic.Model
             this.planets.Add(planet);
         }
 
-        public void RemovePlanet(IPlayer player, IPlanet planet)
+        public void RemovePlanet(IPlanet planet)
         {
             this.planets.Remove(planet);
         }
