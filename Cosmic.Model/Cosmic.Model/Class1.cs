@@ -49,7 +49,90 @@ namespace Cosmic.Model
 
     public interface IPlanet : IShipContainer
     {
+        IShipContainer AlliedDefenders { get; }
         IPlayer Owner { get; }
+    }
+
+    [Flags]
+    public enum Alliance
+    {
+        Neither = 0x0,
+        Offense = 0x1,
+        Defense = 0x2,
+    }
+
+    public class DefaultAlliancePhase
+    {
+        public void Do(GameState state)
+        {
+            // First, the offense announces which players he or she wishes to
+            // have as allies.The offense may not invite the defense as an ally.
+            // These players should not respond to the offense’s invitation yet.
+            var offense = state.ActivePlayer;
+            var defense = state.DefensePlayer;
+            var potentialAllies = state.GetPossibleAllies();
+            var offenseInvites = new HashSet<IPlayer>(offense.InviteOffensiveAllies(potentialAllies));
+            // Next, the defense invites allies. He or she may invite any players
+            // (except the offense) to be allies, even those already invited
+            // by the offense.
+            var defenseInvites = new HashSet<IPlayer>(defense.InviteDefensiveAllies(potentialAllies));
+            // Once allies are invited, players other than the offense and
+            // defense choose sides.Starting with the player to the left of
+            // the offense and continuing clockwise, each player accepts or
+            // declines invitations to ally. A player may only ally with either
+            // the offense or the defense – not both. A player may choose to
+            // ally with neither side.
+            foreach (var potentialAlly in potentialAllies)
+            {
+                List<Alliance> choices = new List<Alliance>();
+                choices.Add(Alliance.Neither);
+                if (offenseInvites.Contains(potentialAlly))
+                {
+                    choices.Add(Alliance.Offense);
+                }
+                if (defenseInvites.Contains(potentialAlly))
+                {
+                    choices.Add(Alliance.Defense);
+                }
+                if (choices.Count == 1)
+                {
+                    continue;
+                }
+                var allianceChoice = potentialAlly.ChooseAllianceSide(choices);
+                if (allianceChoice.HasFlag(Alliance.Offense))
+                {
+                    // If a player allies with the offense, the allying player places one
+                    // to four of his or her ships (taken from any colonies) on the
+                    // hyperspace gate. A player allied with the offense is referred to
+                    // as an offensive ally.
+                    var action = new SelectShipsFromColoniesForHyperspaceGateAction(potentialAlly);
+                    action.Execute(state);
+                    state.AddOffensiveAlly(potentialAlly);
+                }
+                if (allianceChoice.HasFlag(Alliance.Defense))
+                {
+                    // If a player allies with the defense, the allying player places one
+                    // to four of his or her ships (taken from any colonies) next to,
+                    // but not on, the targeted planet. A player allied with the defense
+                    // is referred to as a defensive ally.
+                    var action = new SelectShipsFromColoniesToAidDefenseOfPlanet(potentialAlly, state.HyperspaceGate.TargetPlanet);
+                    action.Execute(state);
+                    state.AddDefensiveAlly(potentialAlly);
+                }
+            }
+        }
+    }
+
+    class SelectShipsFromColoniesToAidDefenseOfPlanet : MoveShipsAction
+    {
+        public SelectShipsFromColoniesToAidDefenseOfPlanet(IPlayer player, IPlanet targetPlanet)
+        {
+            this.ActingPlayer = player;
+            this.Min = 1;
+            this.Max = 4;
+            this.Source = state => state.GetShipsOnPlanets(player);
+            this.Sink = (state, ship) => targetPlanet.AlliedDefenders.AddShip(ship);
+        }
     }
 
     public class GameState
@@ -67,11 +150,16 @@ namespace Cosmic.Model
         private List<IPlanet> planets;
 
         private NormalDeck encounterDeck;
+        private readonly List<IPlayer> offensiveAllies;
+        private readonly List<IPlayer> defensiveAllies;
 
         public GameState()
         {
             this.warp = new Warp();
             this.gate = new HyperspaceGate();
+            this.planets = new List<IPlanet>();
+            this.offensiveAllies = new List<IPlayer>();
+            this.defensiveAllies = new List<IPlayer>();
         }
 
         public IPlayer ActivePlayer { get { return this.players[this.activePlayerIndex]; } }
@@ -84,6 +172,9 @@ namespace Cosmic.Model
 
         public IPlayer[] Players { get { return this.players; } }
         public IPlayer[] NonOffensePlayers { get { return this.players.Where(player => player != this.ActivePlayer).ToArray(); } }
+
+        public IEnumerable<IPlayer> OffensiveAllies { get { return this.offensiveAllies; } }
+        public IEnumerable<IPlayer> DefensiveAllies { get { return this.defensiveAllies; } }
 
         public void SetActivePlayer(IPlayer player)
         {
@@ -108,7 +199,6 @@ namespace Cosmic.Model
             }
             this.players = players;
             this.hands = new IHand[players.Length];
-            this.planets = new List<IPlanet>();
             for (int i = 0; i < players.Length; i++)
             {
                 this.hands[i] = new Hand();
@@ -197,7 +287,7 @@ namespace Cosmic.Model
             }
             return -1;
         }
-        
+
         public IEnumerable<IPlanet> GetPlanets()
         {
             return this.planets;
@@ -229,6 +319,21 @@ namespace Cosmic.Model
             var planets = this.GetPlanets(player);
             return planets.SelectMany(planet => planet.GetShips(player));
         }
+
+        public IEnumerable<IPlayer> GetPossibleAllies()
+        {
+            return this.players.Where(player => player != this.ActivePlayer && player != this.DefensePlayer);
+        }
+
+        public void AddOffensiveAlly(IPlayer ally)
+        {
+            this.offensiveAllies.Add(ally);
+        }
+
+        public void AddDefensiveAlly(IPlayer ally)
+        {
+            this.defensiveAllies.Add(ally);
+        }
     }
 
     internal class Hand : List<ICard>, IHand
@@ -239,7 +344,7 @@ namespace Cosmic.Model
         }
     }
 
-    abstract class ShipContainer : IShipContainer
+    public abstract class ShipContainer : IShipContainer
     {
         private readonly List<IShip> ships = new List<IShip>();
 
@@ -274,13 +379,6 @@ namespace Cosmic.Model
     }
 
     public interface IEncounterCardSelection : ISelection<IEncounterCard> { }
-
-    public class PlanningPhaseParticipant
-    {
-        public IEncounterCardChoose Chooser { get; }
-        public IEncounterCard SelectedCard { get; set; }
-        public IEncounterCardSelection Selection { get; set; }
-    }
 
     //public class DefaultPlanningPhase
     //{
@@ -421,72 +519,6 @@ namespace Cosmic.Model
 
     class QuashCard : ICard
     {
-    }
-
-    enum Victor
-    {
-        Offense,
-        Defense,
-        Both,
-        Neither
-    }
-
-    interface IAttackResolutionRule
-    {
-        Victor Resolve(int offenseTotal, int defenseTotal);
-    }
-
-    interface IResolutionResult
-    {
-
-    }
-
-    class DefaultOffenseWinResolutionResult : IResolutionResult
-    {
-        public void Resolve(IEncounter encounter)
-        {
-            encounter.EstablishOffenseColonies();
-            encounter.DestroyDefenders();
-        }
-    }
-
-    class DefaultDefensiveWinResolutionResult : IResolutionResult
-    {
-
-    }
-
-    class DefaultAttackResolutionRule : IAttackResolutionRule
-    {
-        public Victor Resolve(int offenseTotal, int defenseTotal)
-        {
-            return (offenseTotal - defenseTotal) > 0 ? Victor.Offense : Victor.Defense;
-        }
-    }
-
-    interface ICompensatedResolutionRule
-    {
-        Victor Resolve(bool offenseNegotiated, bool defenseNegotiated);
-    }
-
-    interface INegotiatedResolutionRule
-    {
-        Victor Resolve(bool dealReached);
-    }
-
-    class DefaultNegotiationResolutionRule : INegotiatedResolutionRule
-    {
-        public Victor Resolve(bool dealReached)
-        {
-            return dealReached ? Victor.Both : Victor.Neither;
-        }
-    }
-
-    class DefaultCompensatedResolutionRule : ICompensatedResolutionRule
-    {
-        public Victor Resolve(bool offenseNegotiated, bool defenseNegotiated)
-        {
-            return offenseNegotiated ? Victor.Defense : Victor.Offense;
-        }
     }
 
     //class Encounter
@@ -654,6 +686,50 @@ namespace Cosmic.Model
         }
     }
 
+    class MoveShipsAction
+    {
+        public IPlayer ActingPlayer { get; set; }
+        public int Min { get; set; }
+        public int Max { get; set; }
+        public Func<GameState, IEnumerable<IShip>> Source { get; set; }
+        public Action<GameState, IShip> Sink { get; set; }
+
+        public void Execute(GameState state)
+        {
+            for (int i = 0; i < this.Max; i++)
+            {
+                var ships = this.Source(state);
+                if (!ships.Any())
+                {
+                    break;
+                }
+                var ship = this.ActingPlayer.ChooseShip(ships);
+                if (ship == null)
+                {
+                    if (i < this.Min)
+                    {
+                        i--;
+                        continue;
+                    }
+                    break;
+                }
+                this.Sink(state, ship);
+            }
+        }
+    }
+
+    class SelectShipsFromColoniesForHyperspaceGateAction : MoveShipsAction
+    {
+        public SelectShipsFromColoniesForHyperspaceGateAction(IPlayer player)
+        {
+            this.ActingPlayer = player;
+            this.Max = 4;
+            this.Min = 1;
+            this.Source = state => state.GetShipsOnPlanets(player);
+            this.Sink = (state, ship) => state.AddShipToHyperspaceGate(ship);
+        }
+    }
+
     public class DefaultLaunchPhase
     {
         public void Do(GameState state)
@@ -678,25 +754,26 @@ namespace Cosmic.Model
                     state.SetDefensivePlayer(defense);
                 }
             }
-            for (int i = 0; i < 4; i++)
-            {
-                var ships = state.GetShipsOnPlanets(offense);
-                if (!ships.Any())
-                {
-                    break;
-                }
-                var ship = offense.ChooseShip(ships);
-                if (ship == null)
-                {
-                    if (i == 0)
-                    {
-                        i--;
-                        continue;
-                    }
-                    break;
-                }
-                state.AddShipToHyperspaceGate(ship);
-            }
+            var action = new SelectShipsFromColoniesForHyperspaceGateAction(offense);
+            action.Execute(state);
+            //for (int i = 0; i < 4; i++)
+            //{
+            //    var ships = state.GetShipsOnPlanets(offense);
+            //    if (!ships.Any())
+            //    {
+            //        break;
+            //    }
+            //    var ship = offense.ChooseShip(ships);
+            //    if (ship == null)
+            //    {
+            //        if (i == 0)
+            //        {
+            //            i--;
+            //            continue;
+            //        }
+            //        break;
+            //    }
+            //}
         }
     }
 
@@ -795,16 +872,26 @@ namespace Cosmic.Model
         public IPlayer Owner { get { return this.owner; } }
     }
 
-    internal class Planet : ShipContainer, IPlanet
+    public class Planet : ShipContainer, IPlanet
     {
-        private IPlayer owner;
+        public IPlayer Owner { get; set; }
 
-        public IPlayer Owner { get { return this.owner; } }
+        public IShipContainer AlliedDefenders { get; private set; }
 
-        public Planet(IPlayer owner)
+        public Planet()
         {
-            this.owner = owner;
+            this.AlliedDefenders = new DefenderShips();
         }
+
+        public Planet(IPlayer owner) : this()
+        {
+            this.Owner = owner;
+        }
+    }
+
+    public class DefenderShips : ShipContainer
+    {
+
     }
 
     public enum EncounterCardType
@@ -818,44 +905,6 @@ namespace Cosmic.Model
     //{
     //    EncounterCardType Type { get; set; }
     //}
-
-    internal class Colony : IColony
-    {
-        private readonly IPlayer owner;
-        private int v;
-
-        public Colony(IPlayer defense, int v)
-        {
-            this.owner = defense;
-            this.v = v;
-        }
-
-        public IPlayer Owner
-        {
-            get
-            {
-                return this.owner;
-            }
-
-            set
-            {
-                throw new NotImplementedException();
-            }
-        }
-
-        public IEnumerable<IShip> Ships
-        {
-            get
-            {
-                throw new NotImplementedException();
-            }
-
-            set
-            {
-                throw new NotImplementedException();
-            }
-        }
-    }
 
     public interface IDeck<T> where T : ICard
     {
@@ -934,7 +983,9 @@ namespace Cosmic.Model
         IPlanet ChooseTargetPlanet(IEnumerable<IPlanet> planets);
         IShip ChooseShip(IEnumerable<IShip> ships);
         IPlayer ChoosePlayerToAttack(IEnumerable<IPlayer> players);
-        //bool ShouldRedrawDestiny(IGame game);
+        Alliance ChooseAllianceSide(IEnumerable<Alliance> choices);
+        IEnumerable<IPlayer> InviteOffensiveAllies(IEnumerable<IPlayer> invited);
+        IEnumerable<IPlayer> InviteDefensiveAllies(IEnumerable<IPlayer> invited);
     }
 
     public interface IShip
