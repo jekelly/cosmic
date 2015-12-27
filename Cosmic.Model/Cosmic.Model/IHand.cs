@@ -4,7 +4,8 @@ namespace Cosmic.Model
 {
     public interface IHand : IEnumerable<ICard>
     {
+        int Count { get; }
         void Add(ICard card);
-        void Remove(ICard card);
+        bool Remove(ICard card);
     }
 }

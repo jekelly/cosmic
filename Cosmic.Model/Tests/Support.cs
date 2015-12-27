@@ -12,12 +12,18 @@ namespace Tests
 
     class ChooserPlayer : NullPlayer
     {
+        public Func<IEnumerable<IEncounterCard>, IEncounterCard> EncounterCardChooser { get; set; }
         public Func<IPlanet> PlanetChooser { get; set; }
         public Func<ChooserPlayer> PlayerChooser { get; set; }
         public Func<IShip> ShipChooser { get; set; }
         public Func<IEnumerable<IPlayer>, IEnumerable<IPlayer>> OffensiveAllyInviteChooser { get; set; }
         public Func<IEnumerable<IPlayer>, IEnumerable<IPlayer>> DefensiveAllyInviteChooser { get; set; }
         public Func<Alliance> AllianceChooser { get; set; }
+
+        public override IEncounterCard ChooseEncounterCard(IEnumerable<IEncounterCard> hand)
+        {
+            return this.EncounterCardChooser(hand);
+        }
 
         public override IEnumerable<IPlayer> InviteOffensiveAllies(IEnumerable<IPlayer> invited)
         {
@@ -65,6 +71,11 @@ namespace Tests
         public virtual Alliance ChooseAllianceSide(IEnumerable<Alliance> choices)
         {
             return Alliance.Neither;
+        }
+
+        public virtual IEncounterCard ChooseEncounterCard(IEnumerable<IEncounterCard> hand)
+        {
+            return null;
         }
 
         public virtual IPlayer ChoosePlayerToAttack(IEnumerable<IPlayer> players)
@@ -161,6 +172,11 @@ namespace Tests
         }
 
         public IEnumerable<IPlayer> InviteDefensiveAllies(IEnumerable<IPlayer> invited)
+        {
+            throw new NotImplementedException();
+        }
+
+        public IEncounterCard ChooseEncounterCard(IEnumerable<IEncounterCard> hand)
         {
             throw new NotImplementedException();
         }

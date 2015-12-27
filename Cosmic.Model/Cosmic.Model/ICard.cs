@@ -15,21 +15,29 @@ namespace Cosmic.Model
         EncounterCardType Type { get; }
     }
 
-    interface IArtifactCard : ICard
+    public interface IArtifactCard : ICard
     {
     }
 
-    interface IReinforcementCard : ICard
+    public interface IReinforcementCard : ICard
     {
     }
 
-    class AttackEncounterCard : ICard
+    public class AttackEncounterCard : IEncounterCard
     {
         private readonly int value;
 
         public AttackEncounterCard(int value)
         {
             this.value = value;
+        }
+
+        public EncounterCardType Type
+        {
+            get
+            {
+                throw new NotImplementedException();
+            }
         }
 
         public int Value { get { return this.value; } }

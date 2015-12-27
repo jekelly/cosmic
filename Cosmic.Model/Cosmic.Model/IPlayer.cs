@@ -14,5 +14,6 @@ namespace Cosmic.Model
         Alliance ChooseAllianceSide(IEnumerable<Alliance> choices);
         IEnumerable<IPlayer> InviteOffensiveAllies(IEnumerable<IPlayer> invited);
         IEnumerable<IPlayer> InviteDefensiveAllies(IEnumerable<IPlayer> invited);
+        IEncounterCard ChooseEncounterCard(IEnumerable<IEncounterCard> hand);
     }
 }

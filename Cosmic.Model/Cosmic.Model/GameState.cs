@@ -1,11 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Cosmic.Model
 {
+    public class PlayedEncounterCard
+    {
+        public IEncounterCard Card;
+        public bool Visible;
+    }
+
     public class GameState
     {
         private int activePlayerIndex;
@@ -21,8 +25,30 @@ namespace Cosmic.Model
         private List<IPlanet> planets;
 
         private NormalDeck encounterDeck;
+
+        public void DiscardHand(IPlayer player)
+        {
+            var hand = this.GetHand(player);
+            foreach (var card in hand.ToArray())
+            {
+                hand.Remove(card);
+                this.DiscardCard(card);
+            }
+        }
+
+        public void DrawNewHand(IPlayer player)
+        {
+            this.DiscardHand(player);
+            for (int i = 0; i < 8; i++)
+            {
+                this.DrawCardToHand(player);
+            }
+        }
+
         private readonly List<IPlayer> offensiveAllies;
         private readonly List<IPlayer> defensiveAllies;
+
+        private PlayedEncounterCard[] playedEncounterCards;
 
         public GameState()
         {
@@ -32,6 +58,27 @@ namespace Cosmic.Model
             this.offensiveAllies = new List<IPlayer>();
             this.defensiveAllies = new List<IPlayer>();
             this.discardPile = new List<ICard>();
+        }
+
+        public PlayedEncounterCard GetPlayedEncounterCard(IPlayer player)
+        {
+            int index = this.GetPlayerIndex(player);
+            return this.playedEncounterCards[index];
+        }
+
+        public void SetEncounterCard(IPlayer player, IEncounterCard result)
+        {
+            int playerIndex = this.GetPlayerIndex(player);
+            this.playedEncounterCards[playerIndex] = new PlayedEncounterCard()
+            {
+                Card = result,
+                Visible = false,
+            };
+            var hand = this.GetHand(player);
+            if (!hand.Remove(result))
+            {
+                throw new InvalidOperationException("Cannot select a card that isn't in hand.");
+            }
         }
 
         public IPlayer ActivePlayer { get { return this.players[this.activePlayerIndex]; } }
@@ -75,6 +122,7 @@ namespace Cosmic.Model
             {
                 this.hands[i] = new Hand();
             }
+            this.playedEncounterCards = new PlayedEncounterCard[players.Length];
         }
 
         public void SetAliens(params Alien[] aliens)
