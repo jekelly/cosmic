@@ -10,21 +10,75 @@ namespace Cosmic.Model
         public bool Visible;
     }
 
+    public enum GamePhase
+    {
+        Regroup,
+        Destiny,
+        Launch,
+        Alliance,
+        Planning,
+        Reveal,
+        Resolution
+    }
+
     public class GameState
     {
         private int activePlayerIndex;
         private int defensePlayerIndex;
         private readonly IHyperspaceGate gate;
+        private GamePhase currentPhase;
+
+        public EncounterOutcome GetEncounterOutcome(IPlayer player)
+        {
+            int playerIndex = this.GetPlayerIndex(player);
+            return this.encounterOutcomes[playerIndex];
+        }
+
         private readonly IWarp warp;
         private DestinyDeck destinyDeck;
         private readonly List<ICard> discardPile;
 
+        public void MoveShipToWarp(IShipContainer source, IShip ship)
+        {
+            if (!source.RemoveShip(ship))
+            {
+                throw new InvalidOperationException("Cannot remove a ship from a source that does not contain it.");
+            }
+            this.warp.AddShip(ship);
+        }
+
         private IPlayer[] players;
+
         private Alien[] aliens;
         private IHand[] hands;
         private List<IPlanet> planets;
 
         private NormalDeck encounterDeck;
+
+        public void RevealEncounterCards()
+        {
+            foreach (var card in this.playedEncounterCards)
+            {
+                if (card != null)
+                {
+                    card.Visible = true;
+                }
+            }
+        }
+
+        public void TakeCompensation(IPlayer player, IPlayer opponent, int count)
+        {
+            var playerHand = this.GetHand(player);
+            var opponentHand = this.GetHand(opponent);
+            int cards = Math.Min(opponentHand.Count, count);
+            for (int i = 0; i < cards; i++)
+            {
+                // TODO: randomize
+                var card = opponentHand.ElementAt(0);
+                opponentHand.Remove(card);
+                playerHand.Add(card);
+            }
+        }
 
         public void DiscardHand(IPlayer player)
         {
@@ -66,6 +120,59 @@ namespace Cosmic.Model
             return this.playedEncounterCards[index];
         }
 
+        public EncounterResult GetEncounterResult()
+        {
+            return this.encounterResult;
+        }
+
+        public void SetNextPlayer()
+        {
+            int index = this.activePlayerIndex;
+            int next = (index + 1) % this.players.Length;
+            this.activePlayerIndex = next;
+        }
+
+        public void StartNewEncounter()
+        {
+            this.currentPhase = GamePhase.Regroup;
+        }
+
+        public void StartNewTurn()
+        {
+            this.StartNewEncounter();
+        }
+
+        public void RunPhase()
+        {
+            switch (this.currentPhase)
+            {
+                case GamePhase.Regroup:
+                    break;
+                case GamePhase.Destiny:
+                    break;
+                case GamePhase.Launch:
+                    break;
+                case GamePhase.Alliance:
+                    break;
+                case GamePhase.Planning:
+                    break;
+                case GamePhase.Reveal:
+                    break;
+                case GamePhase.Resolution:
+                    break;
+            }
+            this.currentPhase = (this.currentPhase + 1);
+        }
+
+
+        private EncounterOutcome[] encounterOutcomes;
+
+        public void SetEncounterOutcome(IPlayer player, EncounterOutcome outcome)
+        {
+            int playerIndex = this.GetPlayerIndex(player);
+            this.encounterOutcomes[playerIndex] = outcome;
+        }
+
         public void SetEncounterCard(IPlayer player, IEncounterCard result)
         {
             int playerIndex = this.GetPlayerIndex(player);
@@ -81,6 +188,13 @@ namespace Cosmic.Model
             }
         }
 
+        private EncounterResult encounterResult;
+
+        public void SetEncounterResult(EncounterResult encounterResult)
+        {
+            this.encounterResult = encounterResult;
+        }
+
         public IPlayer ActivePlayer { get { return this.players[this.activePlayerIndex]; } }
 
         public IWarp Warp { get { return this.warp; } }
@@ -94,6 +208,24 @@ namespace Cosmic.Model
 
         public IEnumerable<IPlayer> OffensiveAllies { get { return this.offensiveAllies; } }
         public IEnumerable<IPlayer> DefensiveAllies { get { return this.defensiveAllies; } }
+
+        public IEnumerable<IPlayer> PlayersInResolutionOrder
+        {
+            get
+            {
+                yield return this.ActivePlayer;
+                yield return this.DefensePlayer;
+                for (int i = this.activePlayerIndex; 
+                    i != this.activePlayerIndex - 1;
+                    i = (i + 1) % this.players.Length)
+                {
+                    if (i == this.defensePlayerIndex) continue;
+                    yield return this.players[i];
+                }
+            }
+        }
+
+        public int EncounterNumber { get; private set; }
 
         public void SetActivePlayer(IPlayer player)
         {
@@ -123,6 +255,7 @@ namespace Cosmic.Model
                 this.hands[i] = new Hand();
             }
             this.playedEncounterCards = new PlayedEncounterCard[players.Length];
+            this.encounterOutcomes = new EncounterOutcome[players.Length];
         }
 
         public void SetAliens(params Alien[] aliens)

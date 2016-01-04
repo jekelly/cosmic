@@ -41,6 +41,11 @@ namespace Cosmic.Model
         }
 
         public int Value { get { return this.value; } }
+
+        public static explicit operator AttackEncounterCard(PlayedEncounterCard v)
+        {
+            throw new NotImplementedException();
+        }
     }
 
     public class NegotiateEncounterCard : IEncounterCard

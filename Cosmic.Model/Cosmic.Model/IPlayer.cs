@@ -15,5 +15,7 @@ namespace Cosmic.Model
         IEnumerable<IPlayer> InviteOffensiveAllies(IEnumerable<IPlayer> invited);
         IEnumerable<IPlayer> InviteDefensiveAllies(IEnumerable<IPlayer> invited);
         IEncounterCard ChooseEncounterCard(IEnumerable<IEncounterCard> hand);
+        void ChooseRewards(DefenderRewards rewards);
+        IPlanet ChooseColony(IEnumerable<IPlanet> colonies);
     }
 }

@@ -73,6 +73,11 @@ namespace Tests
             return Alliance.Neither;
         }
 
+        public virtual IPlanet ChooseColony(IEnumerable<IPlanet> colonies)
+        {
+            return null;
+        }
+
         public virtual IEncounterCard ChooseEncounterCard(IEnumerable<IEncounterCard> hand)
         {
             return null;
@@ -81,6 +86,11 @@ namespace Tests
         public virtual IPlayer ChoosePlayerToAttack(IEnumerable<IPlayer> players)
         {
             return null;
+        }
+
+        public void ChooseRewards(DefenderRewards rewards)
+        {
+            rewards.Cards = rewards.Count;
         }
 
         public virtual IShip ChooseShip(IEnumerable<IShip> ships)
@@ -177,6 +187,16 @@ namespace Tests
         }
 
         public IEncounterCard ChooseEncounterCard(IEnumerable<IEncounterCard> hand)
+        {
+            throw new NotImplementedException();
+        }
+
+        public void ChooseRewards(DefenderRewards rewards)
+        {
+            throw new NotImplementedException();
+        }
+
+        public IPlanet ChooseColony(IEnumerable<IPlanet> colonies)
         {
             throw new NotImplementedException();
         }

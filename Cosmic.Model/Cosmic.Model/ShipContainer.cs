@@ -22,9 +22,9 @@ namespace Cosmic.Model
             return ships.Where(ship => ship.Owner == activePlayer);
         }
 
-        public void RemoveShip(IShip ship)
+        public bool RemoveShip(IShip ship)
         {
-            this.ships.Remove(ship);
+            return this.ships.Remove(ship);
         }
     }
 

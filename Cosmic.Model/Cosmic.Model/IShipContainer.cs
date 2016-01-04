@@ -7,7 +7,7 @@ namespace Cosmic.Model
         void AddShip(IShip ship);
         IEnumerable<IShip> GetShips();
         IEnumerable<IShip> GetShips(IPlayer player);
-        void RemoveShip(IShip player);
+        bool RemoveShip(IShip ship);
     }
 
     public interface IHyperspaceGate : IShipContainer

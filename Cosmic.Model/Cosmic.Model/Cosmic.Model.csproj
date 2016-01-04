@@ -40,6 +40,8 @@
     <Compile Include="Alliance.cs" />
     <Compile Include="Cards.cs" />
     <Compile Include="DefaultPlanningPhase.cs" />
+    <Compile Include="DefaultResolutionPhase.cs" />
+    <Compile Include="DefaultRevealPhase.cs" />
     <Compile Include="GameSetup.cs" />
     <Compile Include="IShipContainer.cs" />
     <Compile Include="ColorDestinyCard.cs" />
